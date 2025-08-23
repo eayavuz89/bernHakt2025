@@ -1,0 +1,122 @@
+{
+  "info": {
+    "name": "BernHakt Graph API",
+    "_postman_id": "9d1c2b2e-6f8a-4d3e-9f45-7b20a7c0b001",
+    "description": "Collection for Graph (SPARQL) and MySQL (Sequelize) endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" }
+  ],
+  "item": [
+    {
+      "name": "SPARQL - GET /query (default query)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": {
+          "raw": "{{baseUrl}}/query?limit=100",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "query" ],
+          "query": [ { "key": "limit", "value": "100" } ]
+        }
+      }
+    },
+    {
+      "name": "SPARQL - POST /query (custom)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"PREFIX exs: <https://static.rwpz.net/spendcast/schema#>\\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\\nSELECT ?product ?label WHERE {\\n  ?product a exs:Product ; rdfs:label ?label .\\n} LIMIT 10\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": { "raw": "{{baseUrl}}/query", "host": ["{{baseUrl}}"], "path": ["query"] }
+      }
+    },
+    {
+      "name": "SPARQL - POST /download?type=csv",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"SELECT * WHERE { ?s ?p ?o } LIMIT 5\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/download?type=csv",
+          "host": ["{{baseUrl}}"],
+          "path": ["download"],
+          "query": [ { "key": "type", "value": "csv" } ]
+        }
+      }
+    },
+    {
+      "name": "DB - GET /db/users",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": {
+          "raw": "{{baseUrl}}/db/users?limit=25&offset=0",
+          "host": ["{{baseUrl}}"],
+          "path": ["db","users"],
+          "query": [
+            { "key": "limit", "value": "25" },
+            { "key": "offset", "value": "0" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "DB - POST /db/users (create)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"test1\",\n  \"email\": \"test1@example.com\",\n  \"passwordHash\": \"hash\",\n  \"fullName\": \"Test User\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/db/users", "host": ["{{baseUrl}}"], "path": ["db","users"] }
+      }
+    },
+    {
+      "name": "DB - GET /db/purchases?userId=1",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Accept", "value": "application/json" } ],
+        "url": {
+          "raw": "{{baseUrl}}/db/purchases?userId=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["db","purchases"],
+          "query": [ { "key": "userId", "value": "1" } ]
+        }
+      }
+    },
+    {
+      "name": "DB - POST /db/purchases (create with items)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"currency\": \"TRY\",\n  \"status\": \"complete\",\n  \"items\": [\n    { \"productSku\": \"SKU1\", \"productName\": \"Ürün A\", \"quantity\": 2, \"unitPrice\": 50 },\n    { \"productSku\": \"SKU2\", \"productName\": \"Ürün B\", \"quantity\": 1, \"unitPrice\": 25 }\n  ]\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/db/purchases", "host": ["{{baseUrl}}"], "path": ["db","purchases"] }
+      }
+    }
+  ]
+      ,
+      {
+        "name": "ChatGPT - POST /chat",
+        "request": {
+          "method": "POST",
+          "header": [ { "key": "Content-Type", "value": "application/json" } ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"prompt\": \"Merhaba, BernHack için bir alışveriş uygulaması API'si geliştiriyorum. Bana önerilerin var mı?\"\n}"
+          },
+          "url": { "raw": "{{baseUrl}}/chat", "host": ["{{baseUrl}}"], "path": ["chat"] }
+        }
+      }
+}
