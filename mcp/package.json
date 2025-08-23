@@ -1,0 +1,28 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.4",
+    "dotenv": "^17.2.1",
+    "node-fetch": "^3.3.2",
+    "ws": "^8.18.3"
+  },
+  "name": "bernhakt2025",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eayavuz89/bernHakt2025.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/eayavuz89/bernHakt2025/issues"
+  },
+  "homepage": "https://github.com/eayavuz89/bernHakt2025#readme",
+  "devDependencies": {},
+  "description": ""
+}
