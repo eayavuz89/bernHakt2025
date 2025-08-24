@@ -74,13 +74,14 @@ function App() {
       <div className="container">
         <header className="header">
           <div className="branding">
-            <img src={logo} alt="React Router" className="logo" />
-            <p className="text-[64px]">SpendCast</p>
+            <img src={logo} alt="Post Finance Logo" className="logo" />
             <div className="chat-wrapper">
               <div className="chat-box">
+                <div className="chat-header">
                 <h2 className="chat-heading">
                   SpendCast Assistant - Ask me something
                 </h2>
+                </ div>
 
                 {showQuickQuestion && (
                   <div className="quick-question">
