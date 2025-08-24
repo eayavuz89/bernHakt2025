@@ -11,6 +11,7 @@ import { syncModels, User, Purchase, PurchaseItem } from './db/models.js';
 import { createUser, createPurchaseWithItems, getUserPurchases } from './db/services.js';
 
 import { chatWithGPT } from './chatgpt.js';
+import { buildPromptContext } from './promptContext.js';
 
 
 
@@ -26,25 +27,25 @@ app.use((req, res, next) => {
 
 // ChatGPT endpoint
 app.post('/chat', async (req, res) => {
-  const { prompt, model, max_tokens, temperature } = req.body || {};
+  const { prompt, model, max_tokens, temperature, system } = req.body || {};
   if (!prompt) return res.status(400).json({ error: 'Missing prompt in body' });
   try {
-    const response = await chatWithGPT(prompt, { model, max_tokens, temperature });
+    const response = await chatWithGPT(prompt, { model, max_tokens, temperature, system });
     res.json({ response });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// SPARQL sonucu ChatGPT ile açıklama endpointi
+// Explain SPARQL result via ChatGPT endpoint
 app.post('/explain-sparql', async (req, res) => {
-  const { query, prompt } = req.body || {};
+  const { query, prompt, system } = req.body || {};
   if (!query) return res.status(400).json({ error: 'Missing SPARQL query in body' });
   try {
     const raw = await sparql(query);
     const rows = bindingsToObjects(raw);
-    const chatPrompt = `${prompt || 'Bu veriyi açıkla:'}\nVeri: ${JSON.stringify(rows)}`;
-    const explanation = await chatWithGPT(chatPrompt);
+  const chatPrompt = `${prompt || 'Explain this data in English:'}\nData: ${JSON.stringify(rows)}`;
+    const explanation = await chatWithGPT(chatPrompt, { system });
     res.json({ explanation });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -142,21 +143,83 @@ function sanitizeSparql(text) {
   return s;
 }
 
-// Doğal dil sorudan SPARQL sorgusu üretip, sonucu ChatGPT'ye vererek yanıt dönen endpoint
+function systemPrompt() {
+  return `GraphDB üzerinde transaction ve ürün bilgileri şu temel entity’ler ve ilişkiler üzerinden tutuluyor:
+1. FinancialTransaction
+Tipi: exs:FinancialTransaction
+Özellikleri / İlişkiler:
+exs:hasTransactionDate → xsd:date
+ İşlemin gerçekleştiği tarih.
+exs:hasParticipant → exs:Payee
+ İşleme dahil olan taraf (ör. satıcı, market).
+exs:hasReceipt → exs:Receipt
+ İşleme ait fiş/receipt bilgisi.
+2. Participant (Payee)
+Tipi: exs:Payee
+Özellikleri / İlişkiler:
+exs:isPlayedBy → ?merchant
+ Satıcı/market bilgisini (ör. Migros, Coop) ifade eder.
+ ?merchant genellikle bir entity (Organization/Store) veya literal string olabilir.
+3. Receipt
+Tipi: exs:Receipt
+Özellikleri / İlişkiler:
+exs:hasLineItem → exs:ReceiptLineItem
+ Fişte yer alan her satır (ürün veya hizmet).
+4. ReceiptLineItem
+Tipi: exs:ReceiptLineItem
+Özellikleri / İlişkiler:
+exs:lineSubtotal → xsd:decimal
+ O satırdaki ürün/hizmetin fiyatı.
+exs:hasProduct → exs:Product
+ Satırdaki ürünün referansı.
+5. Product
+Tipi: exs:Product
+Özellikleri / İlişkiler:
+rdfs:label → string
+ Ürün adı (ör. Milch 1L, Butterzopf).
+(Opsiyonel) skos:broader / skos:narrower → exs:ProductCategory
+ Ürünün ait olduğu kategori hiyerarşisi (ör. Wein, Bier & Spirituosen).
+6. ProductCategory
+Tipi: exs:ProductCategory
+Özellikleri / İlişkiler:
+rdfs:label → string
+ Kategori adı (ör. Wein, Bier & Spirituosen).
+skos:narrower / skos:broader → exs:ProductCategory
+ Alt/üst kategori ilişkisi.
+:arrows_counterclockwise: Özet Akış
+
+FinancialTransaction
+   ├── hasTransactionDate → xsd:date
+   ├── hasParticipant → Payee ── isPlayedBy → Merchant (ör. Migros)
+   └── hasReceipt → Receipt
+                       └── hasLineItem → ReceiptLineItem
+                                             ├── lineSubtotal → decimal
+                                             └── hasProduct → Product ── label → "Ürün Adı"
+                                                                              └── broader/
+Kullanım Senaryosu
+Tarih filtresi → exs:hasTransactionDate ile zaman bazlı sorgular.
+Merchant bazlı → exs:isPlayedBy ile hangi mağazadan alındığını görmek.
+Ürün bazlı → rdfs:label üzerinden ürün adı veya regex ile filtre.
+Kategori bazlı → skos:broader/narrower kullanarak kategoriye göre harcamaları gruplama.
+Maliyet analizi → exs:lineSubtotal ile fiyat toplama veya agregasyon.`;
+}
+
+// From a natural language question: generate a SPARQL query, run it, then ask ChatGPT to answer based on results
 app.post('/ask-db', async (req, res) => {
-  const { question, model, max_tokens, temperature } = req.body || {};
+  const { question, model, max_tokens, temperature, system } = req.body || {};
   if (!question) return res.status(400).json({ error: 'Missing question in body' });
   let sparqlQuery = null;
   try {
     // fetch schema info and trim if very long
     const schemaText = await getSchemaInfo();
     const schemaSnippet = schemaText && schemaText.length > 3000 ? schemaText.slice(0, 3000) + '\n...[truncated]' : schemaText;
-    // 1. ChatGPT'den SPARQL sorgusu iste (şema bilgisini ekle)
-    const prompt = `${schemaSnippet ? `Şema:\n${schemaSnippet}\n\n` : ''}Aşağıdaki soruya uygun bir SPARQL sorgusu üret ve sadece sorguyu döndür:\nSoru: ${question}`;
-  sparqlQuery = await chatWithGPT(prompt, { model, max_tokens, temperature });
+  // 1. Ask ChatGPT for a SPARQL query using curated context + schema snippet
+  const context = buildPromptContext(schemaSnippet);
+  const prompt = `${context}\n\n# Task\nGenerate a SPARQL query for the following question.\nFollow policy above strictly and return only the query.\nQuestion: ${question}`;
+  sparqlQuery = await chatWithGPT(prompt, { model, max_tokens, temperature, system: systemPrompt() });
   // sanitize ChatGPT output to extract actual SPARQL
   const cleanedQuery = sanitizeSparql(sparqlQuery);
-    // 2. Sorguyu çalıştır (cleaned)
+  // 2. Execute the query (cleaned)
     const raw = await sparql(cleanedQuery);
     let rows;
     // ASK queries return a boolean in many SPARQL endpoints
@@ -168,24 +231,27 @@ app.post('/ask-db', async (req, res) => {
       // Fallback: return raw as-is (string or other form)
       rows = raw;
     }
-    // 3. Sonuçları ve soruyu ChatGPT'ye verip doğal yanıt iste
-    const answerPrompt = `${schemaSnippet ? `Şema:\n${schemaSnippet}\n\n` : ''}Soru: ${question}\nVeri: ${JSON.stringify(rows)}\nYukarıdaki veriye dayanarak sorunun dilinde ve kısa bir yanıt ver.`;
-    const answer = await chatWithGPT(answerPrompt, { model, max_tokens, temperature });
+  // 3. Give results and question to ChatGPT; ask for a concise English answer
+  const answerPrompt = `You are an analyst. Answer in English concisely.\n\nQuestion: ${question}\nData: ${JSON.stringify(rows)}`;
+    const answer = await chatWithGPT(answerPrompt, { model, max_tokens, temperature, system });
   res.json({ answer, sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows });
   } catch (err) {
   res.status(500).json({ error: err && err.message ? err.message : String(err), sparql: sparqlQuery, cleanedSparql: typeof cleanedQuery !== 'undefined' ? cleanedQuery : null });
   }
 });
-// Doğal dil sorudan SPARQL sorgusu üretip sonucu dönen endpoint
+// From a natural language question: generate a SPARQL query and return its results
 app.post('/ask-sparql', async (req, res) => {
-  const { question, model, max_tokens, temperature } = req.body || {};
+  const { question, model, max_tokens, temperature, system } = req.body || {};
   if (!question) return res.status(400).json({ error: 'Missing question in body' });
   try {
-    // ChatGPT'den SPARQL sorgusu iste
-    const prompt = `Aşağıdaki soruya uygun bir SPARQL sorgusu üret ve sadece sorguyu döndür:\nSoru: ${question}`;
-  const sparqlQuery = await chatWithGPT(prompt, { model, max_tokens, temperature });
+  // Ask ChatGPT for a SPARQL query (curated context)
+  const schemaText = await getSchemaInfo();
+  const schemaSnippet = schemaText && schemaText.length > 3000 ? schemaText.slice(0, 3000) + '\n...[truncated]' : schemaText;
+  const context = buildPromptContext(schemaSnippet);
+  const prompt = `${context}\n\n# Task\nGenerate a SPARQL query for the following question.\nFollow policy above strictly and return only the query.\nQuestion: ${question}`;
+  const sparqlQuery = await chatWithGPT(prompt, { model, max_tokens, temperature, system });
   const cleanedQuery = sanitizeSparql(sparqlQuery);
-  // Sorguyu çalıştır
+  // Execute the query
     const raw = await sparql(cleanedQuery);
     let rows;
     if (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'boolean')) {

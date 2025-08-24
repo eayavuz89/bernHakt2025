@@ -1,11 +1,11 @@
-// package.json -> "type": "module" olsun
-// npm i node-fetch
+// Ensure package.json -> "type": "module"
+// Requires: npm i node-fetch
 import fetch from "node-fetch";
 import fs from 'fs';
 
 const ENDPOINT = "http://localhost:7200/repositories/spendcast";
 
-// Security kapalıysa auth gerekmez. Açıksa:
+// If security is disabled, no auth is needed. If enabled, use:
 // const auth = "Basic " + Buffer.from("admin:root").toString("base64");
 
 export async function sparql(query) {
@@ -38,7 +38,7 @@ export function bindingsToObjects(sparqlJson) {
 // If run directly, execute sample query and write results
 if (import.meta.url === `file://${process.cwd().replace(/\\/g, '/')}/graph/index.js`) {
   (async () => {
-  // 1) Basit sayım
+  // 1) Simple count and listing
   const q1 = `PREFIX exs: <https://static.rwpz.net/spendcast/schema#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?product ?label ?name ?description ?category ?migipediaUrl ?migrosId ?migrosOnlineId ?productUrls ?uid
