@@ -11,6 +11,7 @@ import { createUser, createPurchaseWithItems, getUserPurchases } from './db/serv
 
 import { chatWithGPT } from './chatgpt.js';
 import { buildPromptContext } from './promptContext.js';
+import { buildVegaLiteSpec } from './viz.js';
 
 
 
@@ -78,7 +79,8 @@ LIMIT ${limit}`;
   try {
     const raw = await sparql(q);
     const rows = bindingsToObjects(raw);
-    res.json({ rows, count: rows.length });
+  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
+  res.json({ rows, count: rows.length, viz });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -256,7 +258,8 @@ app.post('/ask-db', async (req, res) => {
   // 3. Give results and question to ChatGPT; ask for a concise English answer
   const answerPrompt = `You are an analyst. Answer in English concisely.\n\nQuestion: ${question}\nData: ${JSON.stringify(rows)}`;
     const answer = await chatWithGPT(answerPrompt, { model, max_tokens, temperature, system });
-  res.json({ answer, sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows });
+  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
+  res.json({ answer, sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows, viz });
   } catch (err) {
     // cleanedQuery may be undefined if sanitize failed before declaration; guard it
     let cleanedQuery;
@@ -274,7 +277,7 @@ app.post('/ask-sparql', async (req, res) => {
   const schemaSnippet = schemaText && schemaText.length > 3000 ? schemaText.slice(0, 3000) + '\n...[truncated]' : schemaText;
   const context = buildPromptContext(schemaSnippet);
   const prompt = `${context}\n\n# Task\nGenerate a SPARQL query for the following question.\nFollow policy above strictly and return only the query.\nQuestion: ${question}`;
-  const effectiveSystem = system || process.env.OPENAI_SYSTEM_PROMPT || defaultSystemPrompt();
+  const effectiveSystem = system || process.env.OPENAI_SYSTEM_PROMPT || systemPrompt();
   const sparqlQuery = await chatWithGPT(prompt, { model, max_tokens, temperature, system: effectiveSystem });
   const cleanedQuery = sanitizeSparql(sparqlQuery);
   // Execute the query
@@ -287,7 +290,8 @@ app.post('/ask-sparql', async (req, res) => {
     } else {
       rows = raw;
     }
-    res.json({ sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows, count: Array.isArray(rows) ? rows.length : undefined });
+  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
+  res.json({ sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows, count: Array.isArray(rows) ? rows.length : undefined, viz });
   } catch (err) {
     // In failure path sparqlQuery/cleanedQuery may be undefined
     let sparqlQuery, cleanedQuery;
@@ -304,7 +308,8 @@ app.post('/query', async (req, res) => {
   try {
     const raw = await sparql(query);
     const rows = bindingsToObjects(raw);
-    res.json({ rows, count: rows.length });
+  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
+  res.json({ rows, count: rows.length, viz });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -323,7 +328,8 @@ app.post('/download', async (req, res) => {
       res.setHeader('Content-Type', 'text/csv');
       res.send(csv);
     } else {
-      res.json({ rows, count: rows.length });
+  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
+  res.json({ rows, count: rows.length, viz });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
