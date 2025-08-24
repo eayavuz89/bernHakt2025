@@ -1,5 +1,5 @@
 // Ensure package.json -> "type": "module"
-// Uses Node 18+ built-in fetch (no node-fetch dependency required)
+// Uses Node 18+ built-in fetch (no extra dependency required)
 import fs from 'fs';
 
 const ENDPOINT = "http://localhost:7200/repositories/spendcast";

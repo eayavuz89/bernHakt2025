@@ -4,8 +4,7 @@ import 'dotenv/config';
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import { sparql, bindingsToObjects } from './index.js';
-import fs from 'fs';
+import { sparql, bindingsToObjects } from './sparql.js';
 import { stringify } from 'csv-stringify/sync';
 import { syncModels, User, Purchase, PurchaseItem } from './db/models.js';
 import { createUser, createPurchaseWithItems, getUserPurchases } from './db/services.js';
@@ -144,64 +143,87 @@ function sanitizeSparql(text) {
 }
 
 function systemPrompt() {
-  return `GraphDB üzerinde transaction ve ürün bilgileri şu temel entity’ler ve ilişkiler üzerinden tutuluyor:
-1. FinancialTransaction
-Tipi: exs:FinancialTransaction
-Özellikleri / İlişkiler:
-exs:hasTransactionDate → xsd:date
- İşlemin gerçekleştiği tarih.
-exs:hasParticipant → exs:Payee
- İşleme dahil olan taraf (ör. satıcı, market).
-exs:hasReceipt → exs:Receipt
- İşleme ait fiş/receipt bilgisi.
-2. Participant (Payee)
-Tipi: exs:Payee
-Özellikleri / İlişkiler:
-exs:isPlayedBy → ?merchant
- Satıcı/market bilgisini (ör. Migros, Coop) ifade eder.
- ?merchant genellikle bir entity (Organization/Store) veya literal string olabilir.
-3. Receipt
-Tipi: exs:Receipt
-Özellikleri / İlişkiler:
-exs:hasLineItem → exs:ReceiptLineItem
- Fişte yer alan her satır (ürün veya hizmet).
-4. ReceiptLineItem
-Tipi: exs:ReceiptLineItem
-Özellikleri / İlişkiler:
-exs:lineSubtotal → xsd:decimal
- O satırdaki ürün/hizmetin fiyatı.
-exs:hasProduct → exs:Product
- Satırdaki ürünün referansı.
-5. Product
-Tipi: exs:Product
-Özellikleri / İlişkiler:
-rdfs:label → string
- Ürün adı (ör. Milch 1L, Butterzopf).
-(Opsiyonel) skos:broader / skos:narrower → exs:ProductCategory
- Ürünün ait olduğu kategori hiyerarşisi (ör. Wein, Bier & Spirituosen).
-6. ProductCategory
-Tipi: exs:ProductCategory
-Özellikleri / İlişkiler:
-rdfs:label → string
- Kategori adı (ör. Wein, Bier & Spirituosen).
-skos:narrower / skos:broader → exs:ProductCategory
- Alt/üst kategori ilişkisi.
-:arrows_counterclockwise: Özet Akış
+  return `GraphDB – Core Entities and Relationships for Transactions and Product Information
 
 FinancialTransaction
+Type: exs:FinancialTransaction
+Properties / Relationships:
+
+exs:hasTransactionDate → xsd:date
+The date on which the transaction occurred.
+
+exs:hasParticipant → exs:Payee
+The party involved in the transaction (e.g., seller, supermarket).
+
+exs:hasReceipt → exs:Receipt
+The receipt information associated with the transaction.
+
+Participant (Payee)
+Type: exs:Payee
+Properties / Relationships:
+
+exs:isPlayedBy → ?merchant
+Refers to the seller/merchant (e.g., Migros, Coop).
+?merchant is typically an entity (Organization/Store) or a literal string.
+
+Receipt
+Type: exs:Receipt
+Properties / Relationships:
+
+exs:hasLineItem → exs:ReceiptLineItem
+Each line item in the receipt (product or service).
+
+ReceiptLineItem
+Type: exs:ReceiptLineItem
+Properties / Relationships:
+
+exs:lineSubtotal → xsd:decimal
+The price of the product/service in that line.
+
+exs:hasProduct → exs:Product
+Reference to the product in the line item.
+
+Product
+Type: exs:Product
+Properties / Relationships:
+
+rdfs:label → string
+Product name (e.g., Milch 1L, Butterzopf).
+
+(Optional) skos:broader / skos:narrower → exs:ProductCategory
+The category hierarchy to which the product belongs (e.g., Wine, Beer & Spirits).
+
+ProductCategory
+Type: exs:ProductCategory
+Properties / Relationships:
+
+rdfs:label → string
+Category name (e.g., Wine, Beer & Spirits).
+
+skos:narrower / skos:broader → exs:ProductCategory
+Relationships for subcategories / parent categories.
+
+🔄 Summary Flow
+FinancialTransaction
    ├── hasTransactionDate → xsd:date
-   ├── hasParticipant → Payee ── isPlayedBy → Merchant (ör. Migros)
+   ├── hasParticipant → Payee ── isPlayedBy → Merchant (e.g., Migros)
    └── hasReceipt → Receipt
                        └── hasLineItem → ReceiptLineItem
                                              ├── lineSubtotal → decimal
-                                             └── hasProduct → Product ── label → "Ürün Adı"
+                                             └── hasProduct → Product ── label → "Product Name"
                                                                               └── broader/
-Kullanım Senaryosu
-Tarih filtresi → exs:hasTransactionDate ile zaman bazlı sorgular.
-Merchant bazlı → exs:isPlayedBy ile hangi mağazadan alındığını görmek.
-Ürün bazlı → rdfs:label üzerinden ürün adı veya regex ile filtre.
-Kategori bazlı → skos:broader/narrower kullanarak kategoriye göre harcamaları gruplama.
-Maliyet analizi → exs:lineSubtotal ile fiyat toplama veya agregasyon.`;
+
+Usage Scenarios
+
+Date filtering → with exs:hasTransactionDate for time-based queries.
+
+Merchant-based → with exs:isPlayedBy to see from which store purchases were made.
+
+Product-based → via rdfs:label to filter by product name or regex.
+
+Category-based → using skos:broader/narrower to group expenses by category.
+
+Cost analysis → with exs:lineSubtotal to sum or aggregate prices.`;
 }
 
 // From a natural language question: generate a SPARQL query, run it, then ask ChatGPT to answer based on results
@@ -236,7 +258,10 @@ app.post('/ask-db', async (req, res) => {
     const answer = await chatWithGPT(answerPrompt, { model, max_tokens, temperature, system });
   res.json({ answer, sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows });
   } catch (err) {
-  res.status(500).json({ error: err && err.message ? err.message : String(err), sparql: sparqlQuery, cleanedSparql: typeof cleanedQuery !== 'undefined' ? cleanedQuery : null });
+    // cleanedQuery may be undefined if sanitize failed before declaration; guard it
+    let cleanedQuery;
+    try { cleanedQuery = sanitizeSparql(String(sparqlQuery || '')); } catch {}
+    res.status(500).json({ error: err && err.message ? err.message : String(err), sparql: sparqlQuery, cleanedSparql: cleanedQuery || null });
   }
 });
 // From a natural language question: generate a SPARQL query and return its results
@@ -249,7 +274,8 @@ app.post('/ask-sparql', async (req, res) => {
   const schemaSnippet = schemaText && schemaText.length > 3000 ? schemaText.slice(0, 3000) + '\n...[truncated]' : schemaText;
   const context = buildPromptContext(schemaSnippet);
   const prompt = `${context}\n\n# Task\nGenerate a SPARQL query for the following question.\nFollow policy above strictly and return only the query.\nQuestion: ${question}`;
-  const sparqlQuery = await chatWithGPT(prompt, { model, max_tokens, temperature, system });
+  const effectiveSystem = system || process.env.OPENAI_SYSTEM_PROMPT || defaultSystemPrompt();
+  const sparqlQuery = await chatWithGPT(prompt, { model, max_tokens, temperature, system: effectiveSystem });
   const cleanedQuery = sanitizeSparql(sparqlQuery);
   // Execute the query
     const raw = await sparql(cleanedQuery);
@@ -263,7 +289,11 @@ app.post('/ask-sparql', async (req, res) => {
     }
     res.json({ sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows, count: Array.isArray(rows) ? rows.length : undefined });
   } catch (err) {
-    res.status(500).json({ error: err && err.message ? err.message : String(err), sparql: typeof sparqlQuery !== 'undefined' ? sparqlQuery : null, cleanedSparql: typeof cleanedQuery !== 'undefined' ? cleanedQuery : null });
+    // In failure path sparqlQuery/cleanedQuery may be undefined
+    let sparqlQuery, cleanedQuery;
+    try { sparqlQuery = String(sparqlQuery); } catch {}
+    try { cleanedQuery = sanitizeSparql(String(sparqlQuery || '')); } catch {}
+    res.status(500).json({ error: err && err.message ? err.message : String(err), sparql: sparqlQuery || null, cleanedSparql: cleanedQuery || null });
   }
 });
 
@@ -363,5 +393,5 @@ syncModels()
   })
   .catch(err => {
     console.error('Failed to ensure DB schema:', err.message);
-    process.exit(1);
+    app.listen(port, () => console.log(`Graph API listening without DB on http://localhost:${port}`));
   });
