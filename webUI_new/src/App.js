@@ -32,7 +32,7 @@ function App() {
   const getBotResponse = async (userMessage) => {
     try {
       const response = await fetch(
-        "https:api-bernhackt.letbotchat.com/ask-db",
+        "https://api-bernhackt.letbotchat.com/ask-db",
         {
           method: "POST",
           headers: {

@@ -11,7 +11,7 @@ import { createUser, createPurchaseWithItems, getUserPurchases } from './db/serv
 
 import { chatWithGPT } from './chatgpt.js';
 import { buildPromptContext } from './promptContext.js';
-import { buildVegaLiteSpec } from './viz.js';
+// Visualization and Nutri-Score enrichment disabled
 
 
 
@@ -78,9 +78,8 @@ LIMIT ${limit}`;
 
   try {
     const raw = await sparql(q);
-    const rows = bindingsToObjects(raw);
-  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
-  res.json({ rows, count: rows.length, viz });
+  const rows = bindingsToObjects(raw);
+  res.json({ rows, count: rows.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -258,8 +257,7 @@ app.post('/ask-db', async (req, res) => {
   // 3. Give results and question to ChatGPT; ask for a concise English answer
   const answerPrompt = `You are an analyst. Answer in English concisely.\n\nQuestion: ${question}\nData: ${JSON.stringify(rows)}`;
     const answer = await chatWithGPT(answerPrompt, { model, max_tokens, temperature, system });
-  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
-  res.json({ answer, sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows, viz });
+  res.json({ answer, sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows });
   } catch (err) {
     // cleanedQuery may be undefined if sanitize failed before declaration; guard it
     let cleanedQuery;
@@ -290,8 +288,7 @@ app.post('/ask-sparql', async (req, res) => {
     } else {
       rows = raw;
     }
-  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
-  res.json({ sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows, count: Array.isArray(rows) ? rows.length : undefined, viz });
+    res.json({ sparql: sparqlQuery, cleanedSparql: cleanedQuery, rows, count: Array.isArray(rows) ? rows.length : undefined });
   } catch (err) {
     // In failure path sparqlQuery/cleanedQuery may be undefined
     let sparqlQuery, cleanedQuery;
@@ -307,9 +304,8 @@ app.post('/query', async (req, res) => {
   if (!query) return res.status(400).json({ error: 'Missing query in body' });
   try {
     const raw = await sparql(query);
-    const rows = bindingsToObjects(raw);
-  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
-  res.json({ rows, count: rows.length, viz });
+  const rows = bindingsToObjects(raw);
+  res.json({ rows, count: rows.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -328,8 +324,7 @@ app.post('/download', async (req, res) => {
       res.setHeader('Content-Type', 'text/csv');
       res.send(csv);
     } else {
-  const viz = Array.isArray(rows) ? buildVegaLiteSpec(rows) : null;
-  res.json({ rows, count: rows.length, viz });
+      res.json({ rows, count: rows.length });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
