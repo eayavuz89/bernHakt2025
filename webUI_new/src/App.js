@@ -1,7 +1,7 @@
 import "./App.css";
 import logo from "./post_finance_logo.png";
 import botAvatar from "./avatar.png";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Lottie, { Player } from "lottie-react";
 import loadingGif from "./loading.gif";
 
@@ -11,10 +11,20 @@ function App() {
   const [showQuickQuestion, setShowQuickQuestion] = useState(true);
   const [loading, setLoading] = useState(false);
   const [animationData, setAnimationData] = useState(null);
-  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>;
+
+  const messagesEndRef = useRef(null);
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
-    fetch("https://lottie.host/ac4d6d35-3187-42be-b1ea-102b9a127929/MjC2Y8QfXg.json")
+    fetch(
+      "https://lottie.host/ac4d6d35-3187-42be-b1ea-102b9a127929/MjC2Y8QfXg.json"
+    )
       .then((res) => res.json())
       .then((data) => setAnimationData(data));
   }, []);
@@ -22,7 +32,7 @@ function App() {
   const getBotResponse = async (userMessage) => {
     try {
       const response = await fetch(
-        "https://api-bernhackt.letbotchat.com/ask-db",
+        "https:api-bernhackt.letbotchat.com/ask-db",
         {
           method: "POST",
           headers: {
@@ -44,21 +54,20 @@ function App() {
 
   const handleSend = async () => {
     if (!input.trim()) return;
-  
+
     const userMessage = { sender: "user", text: input };
     setMessages((prev) => [...prev, userMessage]);
-  
+
     setInput(""); // input'u hemen temizle
     setShowQuickQuestion(false);
     setLoading(true); // loading başlasın
-  
+
     const botReplyText = await getBotResponse(userMessage.text);
     const botMessage = { sender: "bot", text: botReplyText };
     setMessages((prev) => [...prev, botMessage]);
-  
+
     setLoading(false); // loading bitsin
   };
-  
 
   return (
     <main className="main">
@@ -69,7 +78,9 @@ function App() {
             <p className="text-[64px]">SpendCast</p>
             <div className="chat-wrapper">
               <div className="chat-box">
-                <h2 className="chat-heading">Spend Cast Assistant - Ask me something</h2>
+                <h2 className="chat-heading">
+                  SpendCast Assistant - Ask me something
+                </h2>
 
                 {showQuickQuestion && (
                   <div className="quick-question">
@@ -88,7 +99,7 @@ function App() {
                           setMessages((prev) => [...prev, userMessage]);
                           setShowQuickQuestion(false);
                           setLoading(true); // Loading başlasın
-                        
+
                           getBotResponse(question).then((botReplyText) => {
                             const botMessage = {
                               sender: "bot",
@@ -125,12 +136,17 @@ function App() {
                       {msg.text}
                     </div>
                   ))}
+                  <div ref={messagesEndRef} />
                 </div>
                 {loading && (
-      <div className="animation">
-        <Lottie animationData={animationData} loop={true} style={{ width: 120, height: 120 }} />
-      </div>
-    )}
+                  <div className="animation">
+                    <Lottie
+                      animationData={animationData}
+                      loop={true}
+                      style={{ width: 120, height: 120 }}
+                    />
+                  </div>
+                )}
                 <div className="input-area">
                   <input
                     type="text"
@@ -154,7 +170,9 @@ function App() {
           </div>
         </header>
       </div>
-      <p className="info" >The analysis is based on 2024 data made available by PostFinance</p>
+      <p className="info">
+        The analysis is based on 2024 data made available by PostFinance
+      </p>
     </main>
   );
 }
